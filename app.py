@@ -134,7 +134,13 @@ with st.sidebar:
 
     st.divider()
     
+    # --- BACKUP & CLOUD SAFEGUARD EXPANDER ---
     with st.expander("⚙️ Backup & Sync"):
+        # Check SQLite modification time for backup reminder safeguard
+        db_modified = datetime.fromtimestamp(os.path.getmtime(DB_PATH)).strftime('%Y-%m-%d %H:%M') if os.path.exists(DB_PATH) else "Unknown"
+        st.caption(f"💾 Last DB update: {db_modified}")
+        st.warning("⚠️ **Cloud Storage Notice:** Streamlit Community Cloud containers reset on reboot. Remember to export JSON backups regularly!")
+
         df_export = get_all_prompts()
         if not df_export.empty:
             export_data = df_export[["title", "folder", "tags", "model_target", "content", "updated_at"]].to_dict(orient="records")
@@ -321,4 +327,5 @@ with col_runner:
         st.info("No `{{variables}}` detected in this prompt.")
         
     st.markdown("**Final Output** *(hover top-right corner to copy)*")
-    st.code(compiled_prompt, language="markdown")
+    # wrap_lines=True prevents horizontal clipping on long prompt lines
+    st.code(compiled_prompt, language="markdown", wrap_lines=True)
