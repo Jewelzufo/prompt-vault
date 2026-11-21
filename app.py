@@ -29,19 +29,25 @@ def init_db():
                 tags TEXT,
                 model_target TEXT,
                 content TEXT NOT NULL,
+                version INTEGER DEFAULT 1,
+                parent_id INTEGER DEFAULT NULL,
                 updated_at TEXT NOT NULL
             )
         """)
         columns = [row[1] for row in conn.execute("PRAGMA table_info(prompts)").fetchall()]
         if "folder" not in columns:
             conn.execute("ALTER TABLE prompts ADD COLUMN folder TEXT DEFAULT 'General'")
+        if "version" not in columns:
+            conn.execute("ALTER TABLE prompts ADD COLUMN version INTEGER DEFAULT 1")
+        if "parent_id" not in columns:
+            conn.execute("ALTER TABLE prompts ADD COLUMN parent_id INTEGER DEFAULT NULL")
         conn.commit()
 
 def get_all_prompts():
     with sqlite3.connect(DB_PATH) as conn:
         return pd.read_sql_query("SELECT * FROM prompts ORDER BY updated_at DESC", conn)
 
-def save_prompt(prompt_id, title, folder, tags, model_target, content):
+def save_prompt(prompt_id, title, folder, tags, model_target, content, version=1, parent_id=None):
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     folder_clean = folder.strip() if folder and folder.strip() else "General"
     tags_str = ",".join([t.strip() for t in tags if t.strip()])
@@ -49,13 +55,13 @@ def save_prompt(prompt_id, title, folder, tags, model_target, content):
     with sqlite3.connect(DB_PATH) as conn:
         if prompt_id is None:
             conn.execute(
-                "INSERT INTO prompts (title, folder, tags, model_target, content, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (title, folder_clean, tags_str, model_target, content, now),
+                "INSERT INTO prompts (title, folder, tags, model_target, content, version, parent_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (title, folder_clean, tags_str, model_target, content, version, parent_id, now),
             )
         else:
             conn.execute(
-                "UPDATE prompts SET title=?, folder=?, tags=?, model_target=?, content=?, updated_at=? WHERE id=?",
-                (title, folder_clean, tags_str, model_target, content, now, prompt_id),
+                "UPDATE prompts SET title=?, folder=?, tags=?, model_target=?, content=?, version=?, updated_at=? WHERE id=?",
+                (title, folder_clean, tags_str, model_target, content, version, now, prompt_id),
             )
         conn.commit()
 
@@ -68,8 +74,8 @@ def create_folder(folder_name):
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
-            "INSERT INTO prompts (title, folder, tags, model_target, content, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (f"[{folder_name} Guide]", folder_name, "folder-placeholder", "Any", "Delete this placeholder once you add prompts to this folder.", now)
+            "INSERT INTO prompts (title, folder, tags, model_target, content, version, parent_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (f"[{folder_name} Guide]", folder_name, "folder-placeholder", "Any", "Delete this placeholder once you add prompts to this folder.", 1, None, now)
         )
         conn.commit()
 
@@ -92,11 +98,13 @@ def import_prompts_from_json(json_bytes):
                 tags = item.get("tags", "")
                 model_target = item.get("model_target", "Any")
                 content = item.get("content", "")
+                version = item.get("version", 1)
+                parent_id = item.get("parent_id", None)
                 updated_at = item.get("updated_at", now)
                 
                 conn.execute(
-                    "INSERT INTO prompts (title, folder, tags, model_target, content, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (title, folder, tags, model_target, content, updated_at)
+                    "INSERT INTO prompts (title, folder, tags, model_target, content, version, parent_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (title, folder, tags, model_target, content, version, parent_id, updated_at)
                 )
             conn.commit()
         return True, f"Successfully imported {len(data)} prompts!"
@@ -134,16 +142,14 @@ with st.sidebar:
 
     st.divider()
     
-    # --- BACKUP & CLOUD SAFEGUARD EXPANDER ---
     with st.expander("⚙️ Backup & Sync"):
-        # Check SQLite modification time for backup reminder safeguard
         db_modified = datetime.fromtimestamp(os.path.getmtime(DB_PATH)).strftime('%Y-%m-%d %H:%M') if os.path.exists(DB_PATH) else "Unknown"
         st.caption(f"💾 Last DB update: {db_modified}")
         st.warning("⚠️ **Cloud Storage Notice:** Streamlit Community Cloud containers reset on reboot. Remember to export JSON backups regularly!")
 
         df_export = get_all_prompts()
         if not df_export.empty:
-            export_data = df_export[["title", "folder", "tags", "model_target", "content", "updated_at"]].to_dict(orient="records")
+            export_data = df_export[["title", "folder", "tags", "model_target", "content", "version", "parent_id", "updated_at"]].to_dict(orient="records")
             json_str = json.dumps(export_data, indent=4)
             st.download_button(
                 label="📥 Export Vault (JSON)",
@@ -190,7 +196,8 @@ with st.sidebar:
                     st.markdown("---")
 
                 for _, row in group.iterrows():
-                    label = f"**{row['title']}**"
+                    version_badge = f" (v{row.get('version', 1)})" if row.get('version', 1) > 1 else ""
+                    label = f"**{row['title']}**{version_badge}"
                     if row["tags"]:
                         label += f"  \n`{row['tags']}`"
                     if st.button(label, key=f"nav_{row['id']}", use_container_width=True):
@@ -287,15 +294,28 @@ with col_editor:
             if not title.strip():
                 st.error("Please enter a title.")
             else:
-                save_prompt(st.session_state.selected_id, title.strip(), folder, tags, model_target, content)
+                current_version = int(active_prompt["version"]) if active_prompt is not None and "version" in active_prompt else 1
+                current_parent = int(active_prompt["parent_id"]) if active_prompt is not None and pd.notna(active_prompt.get("parent_id")) else None
+                save_prompt(st.session_state.selected_id, title.strip(), folder, tags, model_target, content, version=current_version, parent_id=current_parent)
                 st.success("Saved!")
                 st.rerun()
                 
     with btn_dup:
         if active_prompt is not None:
-            if st.button("📋 Duplicate", use_container_width=True):
-                save_prompt(None, f"{title.strip()} (Copy)", folder, tags, model_target, content)
-                st.success("Duplicated!")
+            if st.button("📋 Duplicate (New Version)", use_container_width=True):
+                next_version = int(active_prompt.get("version", 1)) + 1
+                parent = int(active_prompt.get("parent_id") or active_prompt["id"])
+                save_prompt(
+                    prompt_id=None, 
+                    title=f"{title.strip()} (v{next_version})", 
+                    folder=folder, 
+                    tags=tags, 
+                    model_target=model_target, 
+                    content=content, 
+                    version=next_version, 
+                    parent_id=parent
+                )
+                st.success(f"Duplicated as v{next_version}!")
                 st.rerun()
 
     with btn_del:
@@ -309,7 +329,6 @@ with col_runner:
     st.subheader("🚀 Fill & Copy")
     st.caption("Detected `{{variables}}` appear below. Fill them in to compile your final prompt.")
     
-    # Match double braces {{variable_name}} and ignore single-brace JSON objects
     variables = list(dict.fromkeys(re.findall(r"\{\{([a-zA-Z0-9_]+)\}\}", content)))
     compiled_prompt = content
     
@@ -327,5 +346,4 @@ with col_runner:
         st.info("No `{{variables}}` detected in this prompt.")
         
     st.markdown("**Final Output** *(hover top-right corner to copy)*")
-    # wrap_lines=True prevents horizontal clipping on long prompt lines
     st.code(compiled_prompt, language="markdown", wrap_lines=True)
