@@ -16,11 +16,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Use Google Drive if mounted, otherwise fallback to local Colab storage
-DRIVE_DIR = "/content/drive/MyDrive/PromptVault"
-DB_PATH = os.path.join(DRIVE_DIR, "prompts.db") if os.path.exists(DRIVE_DIR) else "prompts.db"
-
 # --- DATABASE SETUP ---
+DB_PATH = "prompts.db"
+
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
@@ -82,7 +80,6 @@ def delete_folder(folder_name):
         conn.commit()
 
 def import_prompts_from_json(json_bytes):
-    """Imports prompts from a JSON backup file."""
     try:
         data = json.loads(json_bytes.decode("utf-8"))
         if not isinstance(data, list):
@@ -116,8 +113,7 @@ if "selected_id" not in st.session_state:
 # --- SIDEBAR: LIBRARY & SEARCH ---
 with st.sidebar:
     st.title("🗂️ Prompt Vault")
-    storage_label = "Google Drive" if "drive" in DB_PATH else "Temp Colab Storage"
-    st.caption(f"Storage: {storage_label}")
+    st.caption("Storage: Local SQLite Database")
     
     col_nb1, col_nb2 = st.columns(2)
     with col_nb1:
@@ -139,11 +135,9 @@ with st.sidebar:
 
     st.divider()
     
-    # --- EXPORT & IMPORT CONTROLS ---
     with st.expander("⚙️ Backup & Sync"):
         df_export = get_all_prompts()
         if not df_export.empty:
-            # Prepare clean export dict (drop internal DB id)
             export_data = df_export[["title", "folder", "tags", "model_target", "content", "updated_at"]].to_dict(orient="records")
             json_str = json.dumps(export_data, indent=4)
             st.download_button(
