@@ -32,7 +32,6 @@ def init_db():
                 updated_at TEXT NOT NULL
             )
         """)
-        # Migrate existing database if the folder column doesn't exist yet
         columns = [row[1] for row in conn.execute("PRAGMA table_info(prompts)").fetchall()]
         if "folder" not in columns:
             conn.execute("ALTER TABLE prompts ADD COLUMN folder TEXT DEFAULT 'General'")
@@ -215,7 +214,7 @@ default_model = active_prompt["model_target"] if active_prompt is not None else 
 default_content = (
     active_prompt["content"]
     if active_prompt is not None
-    else "You are an expert assistant.\n\nTask: {task}\nContext: {context}"
+    else "You are an expert assistant.\n\nTask: {{task}}\nContext: {{context}}"
 )
 
 # --- MAIN WORKSPACE ---
@@ -259,7 +258,7 @@ with col_editor:
         key=f"tags_{st.session_state.selected_id}",
     )
     
-    st.markdown("**Prompt Template** *(use `{variable_name}` for placeholders)*")
+    st.markdown("**Prompt Template** *(use `{{variable_name}}` for placeholders)*")
     content = st_ace(
         value=default_content,
         language="markdown",
@@ -276,28 +275,36 @@ with col_editor:
     est_tokens = max(1, round(char_count / 4))
     st.caption(f"📊 **Stats:** {char_count} characters | ~{word_count} words | **~{est_tokens} tokens** (estimated)")
 
-    btn_save, btn_del = st.columns(2)
+    btn_save, btn_dup, btn_del = st.columns(3)
     with btn_save:
-        if st.button("💾 Save Prompt", type="primary", use_container_width=True):
+        if st.button("💾 Save", type="primary", use_container_width=True):
             if not title.strip():
-                st.error("Please enter a title before saving.")
+                st.error("Please enter a title.")
             else:
                 save_prompt(st.session_state.selected_id, title.strip(), folder, tags, model_target, content)
                 st.success("Saved!")
                 st.rerun()
                 
+    with btn_dup:
+        if active_prompt is not None:
+            if st.button("📋 Duplicate", use_container_width=True):
+                save_prompt(None, f"{title.strip()} (Copy)", folder, tags, model_target, content)
+                st.success("Duplicated!")
+                st.rerun()
+
     with btn_del:
         if active_prompt is not None:
-            if st.button("🗑️ Delete Prompt", use_container_width=True):
+            if st.button("🗑️ Delete", use_container_width=True):
                 delete_prompt(st.session_state.selected_id)
                 st.session_state.selected_id = None
                 st.rerun()
 
 with col_runner:
     st.subheader("🚀 Fill & Copy")
-    st.caption("Detected `{variables}` appear below. Fill them in to compile your final prompt.")
+    st.caption("Detected `{{variables}}` appear below. Fill them in to compile your final prompt.")
     
-    variables = list(dict.fromkeys(re.findall(r"\{([a-zA-Z0-9_]+)\}", content)))
+    # Match double braces {{variable_name}} and ignore single-brace JSON objects
+    variables = list(dict.fromkeys(re.findall(r"\{\{([a-zA-Z0-9_]+)\}\}", content)))
     compiled_prompt = content
     
     if variables:
@@ -311,7 +318,7 @@ with col_runner:
             if user_val:
                 compiled_prompt = compiled_prompt.replace(f"{{{{{var}}}}}", user_val)
     else:
-        st.info("No `{variables}` detected in this prompt.")
+        st.info("No `{{variables}}` detected in this prompt.")
         
     st.markdown("**Final Output** *(hover top-right corner to copy)*")
     st.code(compiled_prompt, language="markdown")
