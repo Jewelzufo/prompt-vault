@@ -67,7 +67,6 @@ def delete_prompt(prompt_id):
         conn.commit()
 
 def create_folder(folder_name):
-    """Creates an empty placeholder prompt so the folder appears immediately."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
@@ -77,7 +76,6 @@ def create_folder(folder_name):
         conn.commit()
 
 def delete_folder(folder_name):
-    """Deletes all prompts belonging to the specified folder."""
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("DELETE FROM prompts WHERE folder=?", (folder_name,))
         conn.commit()
@@ -103,7 +101,6 @@ with st.sidebar:
         if st.button("📁 New Folder", use_container_width=True):
             st.session_state.show_new_folder_modal = True
 
-    # Modal / Expandable input for creating a new folder
     if st.session_state.get("show_new_folder_modal", False):
         with st.form("new_folder_form"):
             new_f_name = st.text_input("Folder Name")
@@ -133,7 +130,6 @@ with st.sidebar:
         
         for folder_name, group in df.groupby("folder", sort=True):
             with st.expander(f"📁 {folder_name} ({len(group)})", expanded=True):
-                # Delete folder button inside expander header/top
                 if folder_name != "General":
                     if st.button(f"🗑️ Delete Folder '{folder_name}'", key=f"delf_{folder_name}", use_container_width=True):
                         delete_folder(folder_name)
@@ -210,7 +206,7 @@ with col_editor:
         label="Tags",
         text="Press enter to add tag",
         value=default_tags,
-        suggestions=["coding", "writing", "analysis", "system", "extraction"],
+        suggestions=["system", "coding", "analysis", "creative", "utility"],
         maxtags=8,
         key=f"tags_{st.session_state.selected_id}",
     )
@@ -227,6 +223,13 @@ with col_editor:
         key=f"ace_{st.session_state.selected_id}",
     )
     
+    # --- TOKEN COUNTER CALCULATION ---
+    # Standard rule of thumb: ~4 characters per token for English text & code
+    char_count = len(content)
+    word_count = len(content.split())
+    est_tokens = max(1, round(char_count / 4))
+    st.caption(f"📊 **Stats:** {char_count} characters | ~{word_count} words | **~{est_tokens} tokens** (estimated)")
+
     btn_save, btn_del = st.columns(2)
     with btn_save:
         if st.button("💾 Save Prompt", type="primary", use_container_width=True):
