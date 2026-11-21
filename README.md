@@ -2,6 +2,12 @@
 
 **Prompt Vault** is a lightweight, local-first prompt management and testing system built with [Streamlit](https://streamlit.io/), SQLite, and Monaco Editor (`streamlit-ace`). It allows you to organize prompts into folders, manage metadata and tags, dynamically fill template variables in real time, and copy compiled prompts on the fly.
 
+<br>
+
+<p align="center">
+  <img src="https://github.com/Jewelzufo/prompt-vault/blob/main/assets/prompt_vault1.png?raw=true" alt="Prompt Vault Logo" heigh="300" width="700" />
+</p>
+
 ---
 
 ## ✨ Features
