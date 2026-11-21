@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import sqlite3
@@ -80,6 +81,32 @@ def delete_folder(folder_name):
         conn.execute("DELETE FROM prompts WHERE folder=?", (folder_name,))
         conn.commit()
 
+def import_prompts_from_json(json_bytes):
+    """Imports prompts from a JSON backup file."""
+    try:
+        data = json.loads(json_bytes.decode("utf-8"))
+        if not isinstance(data, list):
+            return False, "Invalid JSON format: Expected a list of prompts."
+        
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        with sqlite3.connect(DB_PATH) as conn:
+            for item in data:
+                title = item.get("title", "Untitled Prompt")
+                folder = item.get("folder", "General")
+                tags = item.get("tags", "")
+                model_target = item.get("model_target", "Any")
+                content = item.get("content", "")
+                updated_at = item.get("updated_at", now)
+                
+                conn.execute(
+                    "INSERT INTO prompts (title, folder, tags, model_target, content, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (title, folder, tags, model_target, content, updated_at)
+                )
+            conn.commit()
+        return True, f"Successfully imported {len(data)} prompts!"
+    except Exception as e:
+        return False, f"Import failed: {str(e)}"
+
 init_db()
 
 # --- SESSION STATE ---
@@ -109,6 +136,33 @@ with st.sidebar:
                 create_folder(new_f_name.strip())
                 st.session_state.show_new_folder_modal = False
                 st.rerun()
+
+    st.divider()
+    
+    # --- EXPORT & IMPORT CONTROLS ---
+    with st.expander("⚙️ Backup & Sync"):
+        df_export = get_all_prompts()
+        if not df_export.empty:
+            # Prepare clean export dict (drop internal DB id)
+            export_data = df_export[["title", "folder", "tags", "model_target", "content", "updated_at"]].to_dict(orient="records")
+            json_str = json.dumps(export_data, indent=4)
+            st.download_button(
+                label="📥 Export Vault (JSON)",
+                data=json_str,
+                file_name=f"prompt_vault_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+        
+        uploaded_file = st.file_uploader("📤 Import Vault (JSON)", type=["json"])
+        if uploaded_file is not None:
+            if st.button("Confirm Import", use_container_width=True):
+                success, message = import_prompts_from_json(uploaded_file.getvalue())
+                if success:
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
 
     st.divider()
     
@@ -223,8 +277,6 @@ with col_editor:
         key=f"ace_{st.session_state.selected_id}",
     )
     
-    # --- TOKEN COUNTER CALCULATION ---
-    # Standard rule of thumb: ~4 characters per token for English text & code
     char_count = len(content)
     word_count = len(content.split())
     est_tokens = max(1, round(char_count / 4))
