@@ -26,6 +26,38 @@
 ## 📦 Installation & Local Setup
 
 1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/Jewelzufo/prompt-vault.git](https://github.com/Jewelzufo/prompt-vault.git)
-   cd prompt-vault
+```bash
+git clone [https://github.com/Jewelzufo/prompt-vault.git](https://github.com/Jewelzufo/prompt-vault.git)
+cd prompt-vault
+```
+
+2. **Install dependencies:**
+```bash
+pip install -r requirements.txt
+```
+
+3. **Run the application:**
+```bash
+streamlit run app.py
+```
+
+---
+
+## 🚀 Deployment on Streamlit Community Cloud
+
+1. Push your repository to GitHub (ensure `app.py` and `requirements.txt` are in the root directory).
+2. Head over to [Streamlit Community Cloud](https://share.streamlit.io/).
+3. Click **New app**, select your repository (`Jewelzufo/prompt-vault`), set the branch to `main`, and point the main file path to `app.py`.
+4. Click **Deploy!**
+
+---
+
+## 📄 License
+
+This project is open-source under the Apache-2.0 License.
+
+```
+
+<FollowUp label="Want me to also generate a matching requirements.txt file for your repository?" query="Can you generate the requirements.txt file for the Prompt Vault project?"/>
+
+```
